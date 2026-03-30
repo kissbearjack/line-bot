@@ -145,7 +145,13 @@ def parse_with_gpt(text):
     return json.loads(response.choices[0].message.content)
 
 
+def force_split_address(text):
+    text = ensure_str(text)
 
+    # 強制把 1地址 2地址 拆開
+    text = re.sub(r'(\d+)(?=[^\d])', r'\n\1', text)
+
+    return text.strip()
 
 
 def normalize_inline_multivalue(text):
@@ -170,9 +176,12 @@ def build_reply_text(transcript, data):
     data["司機行動電話"] = format_phone_plain(data["司機行動電話"])
 
     # 🔥 多行 → 單行（關鍵）
-    member_name = normalize_inline_multivalue(data["會員姓名"])
-    address = normalize_inline_multivalue(data["地址"])
-    note = normalize_inline_multivalue(data["車商備註"])
+    member_raw = force_split_address(data["會員姓名"])
+    member_name = normalize_inline_multivalue(member_raw)
+    address_raw = force_split_address(data["地址"])
+    address = normalize_inline_multivalue(address_raw)
+    note_raw = force_split_address(data["車商備註"])
+    note = normalize_inline_multivalue(note_raw)
 
     row = [
         safe_plain_field(data["預約日期"]),
