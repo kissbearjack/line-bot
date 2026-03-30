@@ -148,33 +148,43 @@ def parse_with_gpt(text):
 def build_reply_text(transcript, data):
     data = ensure_fields(data)
 
-    # 只做格式整理，不改語意
+    # 格式整理（不動語意）
     data["會員姓名"] = format_member_block(data["會員姓名"])
     data["車號"] = format_car_no(data["車號"])
     data["司機行動電話"] = format_phone_plain(data["司機行動電話"])
 
-    reply_text = f"""📄 逐字稿
-{transcript}
+    # 🔥 把地址換成單行（避免 Excel 爆掉）
+    address = data["地址"].replace("\n", " ")
 
-📊 訂單欄位
-預約日期：{data["預約日期"]}
-預約時間：{data["預約時間"]}
-航班編號：{data["航班編號"]}
-服務類型：{data["服務類型"]}
-會員姓名：{data["會員姓名"]}
-成人數：{data["成人數"]}
-加點次數：{data["加點次數"]}
-車型：{data["車型"]}
-地址：{data["地址"]}
-航站：{data["航站"]}
-司機：{data["司機"]}
-車號：{data["車號"]}
-司機行動電話：{data["司機行動電話"]}
-車商備註：{data["車商備註"]}
-請準備安全座椅：{data["請準備安全座椅"]}
-收現金：{data["收現金"]}
-機代費：{data["機代費"]}
-外派價：{data["外派價"]}
+    # 🔥 欄位順序（對應 Excel）
+    row = [
+        data["預約日期"],
+        data["預約時間"],
+        data["航班編號"],
+        data["服務類型"],
+        data["會員姓名"],
+        data["成人數"],
+        data["加點次數"],
+        data["車型"],
+        address,
+        data["航站"],
+        data["司機"],
+        data["車號"],
+        data["司機行動電話"],
+        data["車商備註"],
+        data["請準備安全座椅"],
+        data["收現金"],
+        data["機代費"],
+        data["外派價"],
+    ]
+
+    # 🔥 用 TAB 分隔（Excel 最穩）
+    excel_line = "\t".join([str(x) for x in row])
+
+    # 👉 LINE 回傳（加標題方便看）
+    return f"""📋 Excel格式（可直接貼）
+
+{excel_line}
 """
 
     if len(reply_text) > 4500:
