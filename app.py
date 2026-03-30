@@ -154,7 +154,7 @@ def build_reply_text(transcript, data):
     data["司機行動電話"] = format_phone_plain(data["司機行動電話"])
 
     # 🔥 把地址換成單行（避免 Excel 爆掉）
-    address = data["地址"].replace("\n", " ")
+    address = data["地址"].replace("\n", "\r\n")
 
     # 🔥 欄位順序（對應 Excel）
     row = [
