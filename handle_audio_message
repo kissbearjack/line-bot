@@ -1,0 +1,4 @@
+# 產生 txt（每次覆蓋）
+file_path = "order.txt"
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(reply_text)
