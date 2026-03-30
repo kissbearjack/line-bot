@@ -148,8 +148,8 @@ def parse_with_gpt(text):
 def force_split_address(text):
     text = ensure_str(text)
 
-    # 強制把 1地址 2地址 拆開
-    text = re.sub(r'(\d+)(?=[^\d])', r'\n\1', text)
+    # 只在「數字 + 台灣地址關鍵字」才拆
+    text = re.sub(r'(\d)(?=(台|縣|市|區|鄉|鎮|里|路|街|段|巷|弄|號))', r'\n\1', text)
 
     return text.strip()
 
@@ -176,12 +176,10 @@ def build_reply_text(transcript, data):
     data["司機行動電話"] = format_phone_plain(data["司機行動電話"])
 
     # 🔥 多行 → 單行（關鍵）
-    member_raw = force_split_address(data["會員姓名"])
-    member_name = normalize_inline_multivalue(member_raw)
+    member_name = normalize_inline_multivalue(data["會員姓名"])
     address_raw = force_split_address(data["地址"])
     address = normalize_inline_multivalue(address_raw)
-    note_raw = force_split_address(data["車商備註"])
-    note = normalize_inline_multivalue(note_raw)
+    note = normalize_inline_multivalue(data["車商備註"])
 
     row = [
         safe_plain_field(data["預約日期"]),
