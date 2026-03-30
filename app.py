@@ -23,16 +23,12 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 # =========================
-# 工具（沿用 voice_order.py 思路）
+# 基本工具
 # =========================
 def ensure_str(x):
     if x is None:
         return ""
     return str(x).strip()
-
-
-def format_member_block(text):
-    return ensure_str(text)
 
 
 def format_phone_plain(phone):
@@ -61,6 +57,31 @@ def ensure_fields(data):
     return data
 
 
+def normalize_inline_multivalue(text):
+    """
+    只做格式轉換，不做內容判斷：
+    - 保留 GPT 已經切好的多行
+    - 多行轉成單格可貼的單行格式
+    """
+    text = ensure_str(text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [x.strip() for x in text.split("\n") if x.strip()]
+    return " ｜ ".join(lines)
+
+
+def safe_plain_field(text):
+    """
+    只做輸出安全清洗，不做語意判斷
+    """
+    text = ensure_str(text)
+    text = text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+# =========================
+# Whisper
+# =========================
 def speech_to_text(file_path):
     with open(file_path, "rb") as audio_file:
         res = client.audio.transcriptions.create(
@@ -71,6 +92,9 @@ def speech_to_text(file_path):
     return res.text
 
 
+# =========================
+# GPT 結構解析
+# =========================
 def parse_with_gpt(text):
     response = client.chat.completions.create(
         model="gpt-4.1",
@@ -81,43 +105,34 @@ def parse_with_gpt(text):
                 "content": """
 你是台灣機場接送訂單解析器。
 
-1. 只能輸出 JSON
-2. 必須輸出完整18欄
-3. 沒資料填 "" 或 0
-4. 不要解釋
+你只能輸出 JSON，不可輸出任何解釋文字。
 
-【地址辨識規則（強制）】
-- 只要內容包含以下任一關鍵字，就一定是地址：
-  縣、市、區、鄉、鎮、里、路、街、段、巷、弄、號
-- 地址必須完整保留，不可刪字
-- 地址不得改寫、不得簡化
-- 地址不得拆錯
+【硬性規則】
+1. 必須輸出完整18欄
+2. 沒資料填 "" 或 0
+3. 不可多欄、不可少欄
+4. 不可額外解釋
 
-【地址輸出格式（強制）】
-- 多筆地址請用：
+【地址規則】
+1. 地址由你負責判斷與結構化
+2. 多筆地址必須分行輸出，不可放在同一行
+3. 格式必須如下：
 1地址A
 2地址B
 3地址C
-- 編號必須連續，不可跳號
+4. 地址必須完整保留，不可刪字、不可簡化、不可截斷
+5. 不可把地址塞進備註
 
-【禁止錯誤】
-- 不可把地址誤當備註
-- 不可把地址截斷
-- 不可合併不同地址
-"""
-            },
-            {
-                "role": "user",
-                "content": f"""
-逐字稿：
-{text}
+【會員姓名規則】
+1. 多位乘客可分行輸出
+2. 不可把地址、電話混進姓名欄
 
-注意：
-只要是地址，一定完整輸出，不可漏掉任何一筆
+【備註規則】
+1. 特殊需求、提醒、禁菸、代收金額、行李資訊放備註
+2. 不可把地址拆進備註
 
-輸出：
-
-{{
+請嚴格輸出以下 JSON 結構：
+{
   "預約日期": "",
   "預約時間": "",
   "航班編號": "",
@@ -136,7 +151,13 @@ def parse_with_gpt(text):
   "收現金": "",
   "機代費": "",
   "外派價": ""
-}}
+}
+"""
+            },
+            {
+                "role": "user",
+                "content": f"""逐字稿：
+{text}
 """
             }
         ]
@@ -145,40 +166,15 @@ def parse_with_gpt(text):
     return json.loads(response.choices[0].message.content)
 
 
-def force_split_address(text):
-    text = ensure_str(text)
-
-    # 只在「數字 + 台灣地址關鍵字」才拆
-    text = re.sub(r'(\d)(?=(台|縣|市|區|鄉|鎮|里|路|街|段|巷|弄|號))', r'\n\1', text)
-
-    return text.strip()
-
-
-def normalize_inline_multivalue(text):
-    text = ensure_str(text)
-    text = text.replace("\r", "\n")
-    lines = [x.strip() for x in text.split("\n") if x.strip()]
-    return " ｜ ".join(lines)
-
-
-def safe_plain_field(text):
-    text = ensure_str(text)
-    text = text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
+# =========================
+# 輸出 Excel 可貼格式
+# =========================
 def build_reply_text(transcript, data):
     data = ensure_fields(data)
 
-    # 格式整理
-    data["車號"] = format_car_no(data["車號"])
-    data["司機行動電話"] = format_phone_plain(data["司機行動電話"])
-
-    # 🔥 多行 → 單行（關鍵）
+    # 只做格式清洗，不做內容判斷
     member_name = normalize_inline_multivalue(data["會員姓名"])
-    address_raw = force_split_address(data["地址"])
-    address = normalize_inline_multivalue(address_raw)
+    address = normalize_inline_multivalue(data["地址"])
     note = normalize_inline_multivalue(data["車商備註"])
 
     row = [
@@ -193,8 +189,8 @@ def build_reply_text(transcript, data):
         address,
         safe_plain_field(data["航站"]),
         safe_plain_field(data["司機"]),
-        safe_plain_field(data["車號"]),
-        safe_plain_field(data["司機行動電話"]),
+        safe_plain_field(format_car_no(data["車號"])),
+        safe_plain_field(format_phone_plain(data["司機行動電話"])),
         note,
         safe_plain_field(data["請準備安全座椅"]),
         safe_plain_field(data["收現金"]),
@@ -221,7 +217,7 @@ def home():
 # =========================
 # callback
 # =========================
-@app.route("/callback", methods=['POST'])
+@app.route("/callback", methods=["POST"])
 def callback():
     try:
         body = request.get_json(force=True)
@@ -235,12 +231,10 @@ def callback():
             message = event.get("message", {})
             message_type = message.get("type")
 
-            # ========= 文字訊息 =========
             if message_type == "text":
                 user_msg = message.get("text", "")
                 reply_message(reply_token, f"你說的是：{user_msg}")
 
-            # ========= 語音訊息 =========
             elif message_type == "audio":
                 handle_audio_message(reply_token, message)
 
