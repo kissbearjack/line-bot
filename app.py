@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, send_file
 import requests
 import os
 import json
@@ -172,7 +172,6 @@ def parse_with_gpt(text):
 def build_reply_text(transcript, data):
     data = ensure_fields(data)
 
-    # 只做格式清洗，不做內容判斷
     member_name = normalize_inline_multivalue(data["會員姓名"])
     address = normalize_inline_multivalue(data["地址"])
     note = normalize_inline_multivalue(data["車商備註"])
@@ -212,10 +211,17 @@ def build_reply_text(transcript, data):
 @app.route("/")
 def home():
     return "LINE BOT RUNNING"
+
+
+# =========================
+# 下載最新訂單檔
+# =========================
 @app.route("/download")
 def download():
-    from flask import send_file
-    return send_file("order.txt", as_attachment=True)
+    file_path = "order.txt"
+    if not os.path.exists(file_path):
+        return "目前沒有可下載的訂單檔", 404
+    return send_file(file_path, as_attachment=True, download_name="order.txt")
 
 
 # =========================
@@ -281,22 +287,17 @@ def handle_audio_message(reply_token, message):
         data = parse_with_gpt(transcript)
         print("GPT解析:", data)
 
-        # 4. 組合回覆
+        # 4. 組合 Excel 可貼格式
         reply_text = build_reply_text(transcript, data)
 
-        # 5. 產生 txt（覆蓋）
+        # 5. 產生 txt（每次覆蓋舊檔，只保留最新一筆）
         file_path = "order.txt"
         with open(file_path, "w", encoding="utf-8") as f:
-        f.write(reply_text)
+            f.write(reply_text)
 
-        # 6. 下載連結
+        # 6. 回覆下載連結
         download_url = "https://你的render網址.onrender.com/download"
-
-        # 7. 回覆（給下載）
         reply_message(reply_token, f"下載訂單：\n{download_url}")
-
-        # 8. 回覆
-        reply_message(reply_token, reply_text)
 
     except Exception as e:
         print("audio error:", str(e))
