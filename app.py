@@ -145,18 +145,27 @@ def parse_with_gpt(text):
     return json.loads(response.choices[0].message.content)
 
 
+def escape_excel_field(text):
+    text = str(text)
+
+    # 如果有特殊字元 → 用雙引號包起來
+    if any(c in text for c in ['\n', '\r', '\t', '"']):
+        text = text.replace('"', '""')  # Excel escape
+        return f'"{text}"'
+    return text
+
+
 def build_reply_text(transcript, data):
     data = ensure_fields(data)
 
-    # 格式整理（不動語意）
+    # 格式整理
     data["會員姓名"] = format_member_block(data["會員姓名"])
     data["車號"] = format_car_no(data["車號"])
     data["司機行動電話"] = format_phone_plain(data["司機行動電話"])
 
-    # 🔥 把地址換成單行（避免 Excel 爆掉）
-    address = data["地址"].replace("\n", "\r\n")
+    # 🔥 地址保留換行（關鍵）
+    address = data["地址"].replace("\r", "")
 
-    # 🔥 欄位順序（對應 Excel）
     row = [
         data["預約日期"],
         data["預約時間"],
@@ -178,10 +187,12 @@ def build_reply_text(transcript, data):
         data["外派價"],
     ]
 
-    # 🔥 用 TAB 分隔（Excel 最穩）
-    excel_line = "\t".join([str(x) for x in row])
+    # 🔥 每欄做防爆處理
+    safe_row = [escape_excel_field(x) for x in row]
 
-    # 👉 LINE 回傳（加標題方便看）
+    # 🔥 TAB 分隔
+    excel_line = "\t".join(safe_row)
+
     return f"""📋 Excel格式（可直接貼）
 
 {excel_line}
