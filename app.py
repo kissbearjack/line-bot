@@ -145,13 +145,20 @@ def parse_with_gpt(text):
     return json.loads(response.choices[0].message.content)
 
 
-def escape_excel_field(text):
-    text = str(text)
 
-    # 如果有特殊字元 → 用雙引號包起來
-    if any(c in text for c in ['\n', '\r', '\t', '"']):
-        text = text.replace('"', '""')  # Excel escape
-        return f'"{text}"'
+
+
+def normalize_inline_multivalue(text):
+    text = ensure_str(text)
+    text = text.replace("\r", "\n")
+    lines = [x.strip() for x in text.split("\n") if x.strip()]
+    return " ｜ ".join(lines)
+
+
+def safe_plain_field(text):
+    text = ensure_str(text)
+    text = text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
@@ -159,49 +166,41 @@ def build_reply_text(transcript, data):
     data = ensure_fields(data)
 
     # 格式整理
-    data["會員姓名"] = format_member_block(data["會員姓名"])
     data["車號"] = format_car_no(data["車號"])
     data["司機行動電話"] = format_phone_plain(data["司機行動電話"])
 
-    # 🔥 地址保留換行（關鍵）
-    address = data["地址"].replace("\r", "")
+    # 🔥 多行 → 單行（關鍵）
+    member_name = normalize_inline_multivalue(data["會員姓名"])
+    address = normalize_inline_multivalue(data["地址"])
+    note = normalize_inline_multivalue(data["車商備註"])
 
     row = [
-        data["預約日期"],
-        data["預約時間"],
-        data["航班編號"],
-        data["服務類型"],
-        data["會員姓名"],
-        data["成人數"],
-        data["加點次數"],
-        data["車型"],
+        safe_plain_field(data["預約日期"]),
+        safe_plain_field(data["預約時間"]),
+        safe_plain_field(data["航班編號"]),
+        safe_plain_field(data["服務類型"]),
+        member_name,
+        safe_plain_field(data["成人數"]),
+        safe_plain_field(data["加點次數"]),
+        safe_plain_field(data["車型"]),
         address,
-        data["航站"],
-        data["司機"],
-        data["車號"],
-        data["司機行動電話"],
-        data["車商備註"],
-        data["請準備安全座椅"],
-        data["收現金"],
-        data["機代費"],
-        data["外派價"],
+        safe_plain_field(data["航站"]),
+        safe_plain_field(data["司機"]),
+        safe_plain_field(data["車號"]),
+        safe_plain_field(data["司機行動電話"]),
+        note,
+        safe_plain_field(data["請準備安全座椅"]),
+        safe_plain_field(data["收現金"]),
+        safe_plain_field(data["機代費"]),
+        safe_plain_field(data["外派價"]),
     ]
 
-    # 🔥 每欄做防爆處理
-    safe_row = [escape_excel_field(x) for x in row]
+    excel_line = "\t".join(row)
 
-    # 🔥 TAB 分隔
-    excel_line = "\t".join(safe_row)
+    if len(excel_line) > 4500:
+        excel_line = excel_line[:4500] + " ...(內容過長已截斷)"
 
-    return f"""📋 Excel格式（可直接貼）
-
-{excel_line}
-"""
-
-    if len(reply_text) > 4500:
-        reply_text = reply_text[:4500] + "\n...(內容過長已截斷)"
-
-    return reply_text
+    return excel_line
 
 
 # =========================
