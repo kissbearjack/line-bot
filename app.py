@@ -296,7 +296,7 @@ def handle_audio_message(reply_token, message):
             f.write(reply_text)
 
         # 6. 回覆下載連結
-        download_url = "https://你的render網址.onrender.com/download"
+        download_url = "https://line-bot-mqyt.onrender.com/download"
         reply_message(reply_token, f"下載訂單：\n{download_url}")
 
     except Exception as e:
