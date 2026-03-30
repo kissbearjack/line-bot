@@ -212,6 +212,10 @@ def build_reply_text(transcript, data):
 @app.route("/")
 def home():
     return "LINE BOT RUNNING"
+@app.route("/download")
+def download():
+    from flask import send_file
+    return send_file("order.txt", as_attachment=True)
 
 
 # =========================
@@ -280,7 +284,18 @@ def handle_audio_message(reply_token, message):
         # 4. 組合回覆
         reply_text = build_reply_text(transcript, data)
 
-        # 5. 回覆
+        # 5. 產生 txt（覆蓋）
+        file_path = "order.txt"
+        with open(file_path, "w", encoding="utf-8") as f:
+        f.write(reply_text)
+
+        # 6. 下載連結
+        download_url = "https://你的render網址.onrender.com/download"
+
+        # 7. 回覆（給下載）
+        reply_message(reply_token, f"下載訂單：\n{download_url}")
+
+        # 8. 回覆
         reply_message(reply_token, reply_text)
 
     except Exception as e:
